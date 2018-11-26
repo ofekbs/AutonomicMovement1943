@@ -15,19 +15,18 @@ def bezier_curve(arr):
 
     if len(arr) == 3:
         # q0 = (1-t) * p0 + t * p1
-        q0_x = (1 - t) * arr[0][0] + t * arr[1][0]
-        q0_y = (1 - t) * arr[0][1] + t * arr[1][1]
+        q0_x = (1 - t) * arr[0].x * arr[0].wx + t * arr[1].x * arr[1].wx
+        q0_y = (1 - t) * arr[0].y * arr[0].wy + t * arr[1].y * arr[1].wy
 
         # q1 = (1-t) * p1 + t * p2
-        q1_x = (1 - t) * arr[1][0] + t * arr[2][0]
-        q1_y = (1 - t) * arr[1][1] + t * arr[2][1]
+        q1_x = (1 - t) * arr[1].x * arr[1].wx + t * arr[2].x * arr[2].wx
+        q1_y = (1 - t) * arr[1].y * arr[1].wy + t * arr[2].y * arr[2].wy
 
         # r = (1-t) * q0 + t * q1
         r_x = (1 - t) * q0_x + t * q1_x
         r_y = (1 - t) * q0_y + t * q1_y
 
-        r = (expand(r_x), expand(r_y)) # remove brackets
-
+        r = Point(expand(r_x), expand(r_y))
         return r
 
     else: # split array to two parts
@@ -35,23 +34,36 @@ def bezier_curve(arr):
         r1 = bezier_curve(arr[1:])
 
         # s = (1-t) * r0 + t * r1
-        s_x = (1 - t) * r0[0] + t * r1[0]
-        s_y = (1 - t) * r0[1] + t * r1[1]
+        s_x = (1 - t) * r0.x * r0.wx + t * r1.x * r1.wx
+        s_y = (1 - t) * r0.y * r0.wy + t * r1.y * r1.wy
 
-        s = (expand(s_x), expand(s_y))
+        s = Point(expand(s_x), expand(s_y))
         return s
 
 
-def main():
-    p0 = (1, 6)
-    p1 = (3, 13)
-    p2 = (6, 9)
-    p3 = (10, 18)
-    p4 = (12, 14)
-    p5 = (16, 9)
+class Point:
+    def __init__(self, x, y, wx=1, wy=1):
+        self.x = x
+        self.y = y
+        self.wx = wx
+        self.wy = wy
 
-    r = bezier_curve([p0, p1, p2])
-    print(r)
+
+def main():
+    p0 = Point(1, 8)
+    p1 = Point(-4, 2)
+    p2 = Point(2, -4)
+    p3 = Point(7, 1)
+    p4 = Point(3, 3)
+
+    e1 = Point(0, 0)
+    e2 = Point(0, 6)
+    e3 = Point(6, 6)
+    e4 = Point(12, 0)
+
+    r = bezier_curve([e1, e2, e3, e4])
+    print((r.x, r.y))
+
 
 if __name__ == '__main__':
     main()

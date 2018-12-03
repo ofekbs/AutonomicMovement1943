@@ -1,44 +1,56 @@
-__Author__ = "Ofek BS"
-
+import math as m
+import scipy.special
 from sympy import *
 
 
+def bezier(i, n, t):
+    return binomial(n, i) * pow(t, i) * pow(1 - t, n - i)
+
+
 def bezier_curve(arr):
-    """
-    Creates a spline, using the Bezier Curve.
-    :param arr: array of control points, sorted by x value.
-                first and last point are fixed.
-    :return: a general point - f(t).
-    """
+    t = Symbol('t')
+    x = 0
+    y = 0
+    n = len(arr) - 1 # highest degree
 
-    t = Symbol('t') # Equation's var.
+    for i in range(0, n + 1, 1):
+        x = x + bezier(i, n, t) * arr[i].x
+        y = y + bezier(i, n, t) * arr[i].y
 
-    if len(arr) == 3:
-        # q0 = (1-t) * p0 + t * p1
-        q0_x = (1 - t) * arr[0].x * arr[0].wx + t * arr[1].x * arr[1].wx
-        q0_y = (1 - t) * arr[0].y * arr[0].wy + t * arr[1].y * arr[1].wy
+    return Point(expand(x), expand(y))
 
-        # q1 = (1-t) * p1 + t * p2
-        q1_x = (1 - t) * arr[1].x * arr[1].wx + t * arr[2].x * arr[2].wx
-        q1_y = (1 - t) * arr[1].y * arr[1].wy + t * arr[2].y * arr[2].wy
 
-        # r = (1-t) * q0 + t * q1
-        r_x = (1 - t) * q0_x + t * q1_x
-        r_y = (1 - t) * q0_y + t * q1_y
+def derivative(arr):
+    t = Symbol('t')
+    x = 0
+    y = 0
+    n = len(arr) - 1
 
-        r = Point(expand(r_x), expand(r_y))
-        return r
+    for i in range(0, n, 1):
+        x = x + bezier(i, n - 1, t) * (arr[i + 1].x - arr[i].x)
+        y = y + bezier(i, n - 1, t) * (arr[i + 1].y - arr[i].y)
 
-    else: # split array to two parts
-        r0 = bezier_curve(arr[:-1])
-        r1 = bezier_curve(arr[1:])
+    return Point(expand(x), expand(y))
 
-        # s = (1-t) * r0 + t * r1
-        s_x = (1 - t) * r0.x * r0.wx + t * r1.x * r1.wx
-        s_y = (1 - t) * r0.y * r0.wy + t * r1.y * r1.wy
 
-        s = Point(expand(s_x), expand(s_y))
-        return s
+def rational_bezier_curve(arr):
+    t = Symbol('t')
+    x1 = 0
+    x2 = 0
+    y1 = 0
+    y2 = 0
+    n = len(arr) - 1  # highest degree
+
+    for i in range(0, n + 1, 1):
+        x1 = x1 + bezier(i, n, t) * arr[i].x * arr[i].wx
+        x2 = x2 + bezier(i, n, t) * arr[i].wx
+        y1 = y1 + bezier(i, n, t) * arr[i].y * arr[i].wy
+        y2 = y2 + bezier(i, n, t) * arr[i].wy
+
+    x = expand(x1) / expand(x2)
+    y = expand(y1) / expand(y2)
+
+    return Point(expand(x), expand(y))
 
 
 class Point:
@@ -48,21 +60,40 @@ class Point:
         self.wx = wx
         self.wy = wy
 
+    def to_string(self):
+        x = str(self.x).replace("**", "^")
+        y = str(self.y).replace("**", "^")
+
+        return str("("+x+", "+y+")")
+
+
+class Control_Points:
+    def __init__(self, points):
+        self.points = points
+
+    def to_string(self):
+        for i in range(0, len(self.points), 1):
+            print("Point " + str(i) + ": " + self.points[i].to_string)
+
 
 def main():
-    p0 = Point(1, 8)
-    p1 = Point(-4, 2)
-    p2 = Point(2, -4)
-    p3 = Point(7, 1)
-    p4 = Point(3, 3)
+    p0 = Point(0,0)
+    p1 = Point(3, 10, 5, 5)
+    p2 = Point(6, 3)
+    p3 = Point(10, 7)
+    p4 = Point(13, 5, 5, 5)
+    p5 = Point(10, 3)
 
-    e1 = Point(0, 0)
-    e2 = Point(0, 6)
-    e3 = Point(6, 6)
-    e4 = Point(12, 0)
+    cp = Control_Points([p0, p1])
 
-    r = bezier_curve([e1, e2, e3, e4])
-    print((r.x, r.y))
+    p = bezier_curve(cp.points)
+    print(p.to_string())
+
+    p_der = derivative(cp.points)
+    print(p_der.to_string())
+
+    p_rat = rational_bezier_curve(cp.points)
+    print(p_rat.to_string())
 
 
 if __name__ == '__main__':

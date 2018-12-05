@@ -95,22 +95,9 @@ def bezier_curve(arr):
     return Point(expand(x), expand(y))
 
 
-def derivative(arr):
-    """
-    Calculates general point (Locus) of the curve's derivative.
-    :param arr: collection of points.
-    :return: Locus of the curve's derivative.
-    """
+def der(p):
     t = Symbol('t')
-    x = 0
-    y = 0
-    n = len(arr) - 1
-
-    for i in range(0, n, 1):
-        x = x + bezier(i, n - 1, t) * (arr[i + 1].x - arr[i].x)
-        y = y + bezier(i, n - 1, t) * (arr[i + 1].y - arr[i].y)
-
-    return Point(expand(x), expand(y))
+    return diff(p.x, t), diff(p.y, t)
 
 
 def calc_value(exp, t_new):
@@ -145,7 +132,7 @@ def curve_to_arrays(p, n, d):
 # Functions related to visual issues, pygame, plotting, etc.
 
 
-def update_canvas(code, point=Point(0,0)):
+def update_canvas(code, point = Point(0,0)):
     """
     I don't know what this function actually does, but I don't care.
     :param code: np / dp
@@ -181,14 +168,21 @@ def add_point(point):
     A function that adds a point. Can you believe that??
     :param point: a point.
     """
-    name, cor = point.split(' ')[0], point[len(point.split(' ')[0]):]
+
+    if len(point.split(' ')) == 2:
+        name, cor, wx, wy = point.split(' ')[0], point.split(' ')[1], 1, 1
+
+    else:
+        name, cor, wx, wy = point.split(' ')[0], point.split(' ')[1], point.split(' ')[2], point.split(' ')[3]
+
     x, y = cor.split(',')[0], cor.split(',')[1]
-    points.append(Point(int(x),int(y), 1, 1, name))
+
+    points.append(Point(int(x),int(y), int(wx), int(wy), name))
     points_x.append(int(x))
     points_y.append(int(y))
     update_canvas("np")
 
-    print("point added.")
+    print("New point added.")
 
 
 def draw_path(str):
@@ -206,6 +200,20 @@ def draw_path(str):
 
     p = bezier_curve(send)
     update_canvas("dp", p)
+
+    print("Path " + str + " drawn.")
+    print(p.to_string())
+
+    speed_x, speed_y = der(p)
+
+    print(speed_x)
+    print(speed_y)
+
+    axel_x, axel_y = der(Point(speed_x, speed_y))
+
+    print(axel_x)
+    print(axel_y)
+
 
 
 def show_points():

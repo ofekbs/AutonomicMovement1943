@@ -6,20 +6,28 @@ import matplotlib.pyplot as plt
 from tkinter import *
 
 
-X_LEN = 15 # Length of x axis
-Y_LEN = 15 # Length of y axis
-POINT_SIZE = 5
-LINE_WIDTH = 2
+# Constants
+IS_2018_BOARD = True
+
+TKINTER_SIZE = "400x300" # in px
+SIMULATOR_SIZE = (5, 5) # 1 inch = 100px
+
+X_LEN = 823 # Length of x axis in simulator
+Y_LEN = 823 # Length of y axis in simulator
+POINT_SIZE = 5 # Size of a point in simulator
+LINE_WIDTH = 2 # Width of a line in simulator
+SAMPLE_SIZE = 100
+
+
 points = []
 paths = []
 
-fig = plt.figure(figsize=(4, 4))
+fig = plt.figure(figsize=SIMULATOR_SIZE)
 ax = fig.add_subplot(1, 1, 1, aspect=1)
 ax.set_xlim(0, X_LEN)
 ax.set_ylim(0, Y_LEN)
 ax.grid(linestyle="--", linewidth=0.5, color='.25', zorder=-10)
 ax.set_title("Spline Simulator", fontsize=10, verticalalignment='bottom')
-ax.legend()
 plt.ion()
 
 
@@ -139,7 +147,7 @@ class Window(Frame):
 
 
     def init_window(self):
-        self.master.title("GUI")
+        self.master.title("Simulator manager")
         self.pack(fill=BOTH, expand=1)
         self.lines = []
         self.add_line()
@@ -167,6 +175,7 @@ class Window(Frame):
                 btnAdd.grid(column=2, row=self.lines_count)
                 label = Label(self, text=str(self.lines_count))
                 label.grid(column=3, row=self.lines_count)
+
                 self.lines.append((entry, btnAdd))
 
                 print(self.lines_count-1)
@@ -186,21 +195,66 @@ class Window(Frame):
 # Plot functions
 
 
-def plot():
+def plot_2018_board():
+    """
+    Plot the 2018 board.
+    see: https://firstfrc.blob.core.windows.net/frc2018/Manual/HTML/2018FRCGameSeasonManual_files/image008.jpg
+    and: https://i.redd.it/3iwa9dircqd01.png
+    for extra details.
+    ***at the moment, only half scoring table is plotted.*
+    """
+    top_left_corner_border = plt.Polygon([[0,823], [91,823], [0,747]], fill='k', edgecolor='k')
+    bottom_left_corner_border = plt.Polygon([[0,0], [0,76], [91,0]], fill='k', edgecolor='k')
+    plt.gca().add_line(top_left_corner_border)
+    plt.gca().add_line(bottom_left_corner_border)
 
+    # Auto Line
+    auto_line = plt.Line2D((305, 305), (0, 823), lw=2.5)
+    plt.gca().add_line(auto_line)
+
+    # Exchange Zone
+    exchange_zone = plt.Rectangle((0, 442), 91, 122, fc='r')
+    plt.gca().add_patch(exchange_zone)
+
+    # Power Cube Zone
+    power_cube_zone = plt.Rectangle((249, 354), 107, 114, fc='r')
+    plt.gca().add_patch(power_cube_zone)
+
+    # Switch Zone
+    switch_zone = plt.Rectangle((356, 216), 142, 390, fc='grey')
+    plt.gca().add_patch(switch_zone)
+
+    # Power Cubes next to Switch Zone
+    for i in range(0,6,1):
+        cube = plt.Rectangle((498, 216+i*(33+38.4)), 33, 33, fc='yellow')
+        plt.gca().add_patch(cube)
+
+    # Null territory
+    null_territory_top = plt.Polygon([[731.5, 581], [731.5, 823], [823, 823], [823, 581]], fill=None, edgecolor='k')
+    null_territory_bottom = plt.Polygon([[731.5, 0], [731.5, 242], [823, 242], [823, 0]], fill=None, edgecolor='k')
+    plt.gca().add_line(null_territory_top)
+    plt.gca().add_line(null_territory_bottom)
+
+    # Scale
+    scale = plt.Rectangle((653.5, 242), 823-653.5, 581-242, fc='black')
+    plt.gca().add_patch(scale)
+
+
+def plot():
     for p in points:
-        ax.plot(p.x, p.y, marker='o', label=str(p.name), linewidth=1, markersize=5)
+        ax.plot(p.x, p.y, marker='o', label=str(p.name), linewidth=1, markersize=POINT_SIZE)
 
     for p in paths:
-        x, y = curve_to_arrays(p, 500, 1/500)
-        ax.plot(x, y, 'r--', linewidth=10)
+        x, y = curve_to_arrays(p, SAMPLE_SIZE, 1/SAMPLE_SIZE)
+        ax.plot(x, y, 'r', linewidth=LINE_WIDTH)
+
+    if IS_2018_BOARD:
+        plot_2018_board()
 
     plt.show()
 
     print("plot ended")
     return "ok"
-
-
 
 
 def execute(input):
@@ -211,14 +265,24 @@ def execute(input):
 
     name, parameters = str(input).split(' = ')[0], str(input).split(' = ')[1]
 
-    if parameters[:1] == '(':
-        x = int(parameters[1:].split(',')[0])
-        y = int(parameters[1:].split(',')[1][:-1])
+    if parameters[:1] == '(': # New point
+        if len(parameters[1:].split(',')) == 4:
+            x = int(parameters[1:].split(',')[0])
+            y = int(parameters[1:].split(',')[1])
+            wx = int(parameters[1:].split(',')[2])
+            wy = int(parameters[1:].split(',')[3][:-1])
 
-        p = Point(x, y, 1, 1, name)
+            p = Point(x, y, wx, wy, name)
+
+        else:
+            x = int(parameters[1:].split(',')[0])
+            y = int(parameters[1:].split(',')[1][:-1])
+
+            p = Point(x, y, 1, 1, name)
+
         points.append(p)
 
-    else:
+    else: # New path
         requested = parameters.split(',')
         send = []
 
@@ -239,12 +303,12 @@ def execute(input):
 
 def main():
     root = Tk()
-    root.geometry("400x300")
+    root.geometry(TKINTER_SIZE)
     app = Window(root)
 
+    if IS_2018_BOARD:
+        plot_2018_board()
     plt.show()
-
-    #ax.plot(3, 5, marker='o', label="hello", linestyle='dashed', linewidth=2, markersize=5)
 
     root.mainloop()
 

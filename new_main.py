@@ -3,20 +3,23 @@ ___Author___ = 'Ofek Bengal Shmueli'
 
 from sympy import *  # <- For Bezier equations
 import matplotlib.pyplot as plt
-from tkinter import *
+from Tkinter import *
 
 
 # Constants
 IS_2018_BOARD = True
 
-TKINTER_SIZE = "400x300" # in px
-SIMULATOR_SIZE = (5, 5) # 1 inch = 100px
+TKINTER_SIZE = "400x300"  # in px
+SIMULATOR_SIZE = (5, 5)  # 1 inch = 100px
 
-X_LEN = 823 # Length of x axis in simulator
-Y_LEN = 823 # Length of y axis in simulator
-POINT_SIZE = 5 # Size of a point in simulator
-LINE_WIDTH = 2 # Width of a line in simulator
-SAMPLE_SIZE = 100
+V_MAX = 40  # Max velocity of the robot in cm/s
+A_MAX = 1  # Max acceleration of the robot in cm/s^2
+
+X_LEN = 823  # Length of x axis in simulator
+Y_LEN = 823  # Length of y axis in simulator
+POINT_SIZE = 5  # Size of a point in simulator
+LINE_WIDTH = 2  # Width of a line in simulator
+SAMPLE_SIZE = 1000
 
 
 points = []
@@ -105,15 +108,15 @@ def bezier_curve(arr):
     return Point(x, y)
 
 
-def calc_value(exp, t_new):
+def calc_value(expression, t_new):
     """
     I don't know how to say "Hatzava" in English, so deal with it.
-    :param exp: parametric expression, usually p.x or p.y
+    :param expression: parametric expression, usually p.x or p.y
     :param t_new: the value we won't to "Lehatziv" (god dammit)
     :return: The calculated value.
     """
     t = Symbol('t')
-    return exp.evalf(subs={t: t_new})
+    return expression.evalf(subs={t: t_new})
 
 
 def curve_to_arrays(p, n, d):
@@ -134,6 +137,168 @@ def curve_to_arrays(p, n, d):
     return x_list, y_list
 
 
+def find_length(arr):
+    """
+    Calculates the length of the curve until each point.
+    :param arr: the trajectory.
+    :return: the same trajectory with length value for each point.
+    """
+    length = 0
+    arr[0]['length'] = 0
+    for i in range(len(arr)-1):
+        x1 = calc_value(arr[i]['x'], i * 1.0 / SAMPLE_SIZE)
+        x2 = calc_value(arr[i + 1]['x'], (i + 1) * 1.0 / SAMPLE_SIZE)
+        y1 = calc_value(arr[i]['y'], i * 1.0 / SAMPLE_SIZE)
+        y2 = calc_value(arr[i + 1]['y'], (i + 1) * 1.0 / SAMPLE_SIZE)
+        length += sqrt((x2 - x1)**2 + (y2 - y1)**2)  # Distance
+        arr[i+1]['length'] = length
+    return arr
+
+
+def physics(arr):
+    """
+    Does all the physics using the kinematics equations we all know and hate.
+    :param arr: the trajectory.
+    :return: the same trajectory with time, velocity and acceleration values for each point.
+    """
+    path_length = arr[len(arr)-1]['length']
+    # If there was no velocity limit, how much time would it take to pass a half of the path at the max acceleration?
+    # x = x0 + v0 * t + 0.5 * a * t^2
+    # path_length/2 = 0 + 0 * t + 0.5 * A_MAX * t^2
+    half_t = sqrt(path_length/A_MAX)
+
+    # And how fast would we get at the end?
+    # v = v0 + at
+    # v = 0 + A_MAX * t
+    no_limit_v = A_MAX * half_t
+
+    # But, is it really possible to go this fast?
+    if no_limit_v <= V_MAX:  # Yes! Run robot, run!
+        # So, let's divide it into 2 parts.
+        # In the first part, we will go at the max acceleration
+        # In the second, we will go at the minus max acceleration, so we will stop exactly at the end of the path
+
+        # But what point will be the last one to enter the first part?
+        middle = 0
+        for i in xrange(1, len(arr)):
+            if arr[i]['length'] >= path_length / 2:
+                middle = i - 1
+                break
+
+        # First part
+        for i in range(middle+1):
+            # x = x0 + v0 * t + 0.5 * a * t^2
+            # x = 0 + 0 * t + 0.5 * A_MAX * t^2
+            arr[i]['t'] = sqrt(2*arr[i]['length'] / A_MAX)
+            # v = v0 + at
+            # v = 0 + A_MAX * t
+            arr[i]['v'] = A_MAX * arr[i]['t']
+            # a = A_MAX
+            arr[i]['a'] = A_MAX
+
+        # Second part
+        for i in range(middle+1, len(arr)):
+            # x = x0 + v0 * t + 0.5 * a *t^2
+            # x = path_length/2 + no_limit_v * (t - half_t) + 0.5 * (-A_MAX) * (t - half_t)^2
+            t1 = (-2 * no_limit_v - 2 * A_MAX * half_t + 2 *
+                  sqrt(no_limit_v ** 2 + 2 * A_MAX * path_length/2 - 2 * A_MAX * arr[i]['length'])) / (-2 * A_MAX)
+            t2 = (-2 * no_limit_v - 2 * A_MAX * half_t - 2 *
+                  sqrt(no_limit_v ** 2 + 2 * A_MAX * path_length/2 - 2 * A_MAX * arr[i]['length'])) / (-2 * A_MAX)
+
+            # Oh no! Two solutions! Which one is correct?
+            if not t1.is_real or t1 < 0 or t1 > 2 * half_t:  # No complex, negative or bigger numbers than the path
+                                                            # time here!
+                arr[i]['t'] = t2
+            else:
+                arr[i]['t'] = t1
+
+            # v = v0 + at
+            # v = no_limit_v + (-A_MAX) * (t - half_t)
+            arr[i]['v'] = no_limit_v - A_MAX * (arr[i]['t'] - half_t)
+            # a = -A_MAX
+            arr[i]['a'] = -A_MAX
+
+    else:  # No! You would stop at the max velocity!
+        # So, let's divide it into 3 parts.
+        # In the first part, we will go at the max acceleration until we reach the max velocity
+        # In the second part, we will go at the same velocity - the max velocity
+        # In the third, we will at the minus max acceleration, so we will stop exactly at the end of the path
+
+        # When and where does the first part end?
+        # v = v0 + at
+        # V_MAX = 0 + A_MAX * part1_end_t
+        part1_end_t = float(V_MAX) / A_MAX
+        # x = x0 + v0 * t + 0.5 * a * t^2
+        # part1_end_x = 0 + 0 * part1_end_t + 0.5 * A_MAX * part1_end_t^2
+        part1_end_x = float(V_MAX ** 2) / (2 * A_MAX)
+
+        # What point will be the last one to enter the first part?
+        first_part = 0
+        for i in xrange(1, len(arr)):
+            if arr[i]['length'] >= part1_end_x:
+                first_part = i - 1
+                break
+
+        # First part
+        for i in range(first_part+1):
+            # x = x0 + v0 * t + 0.5 * a * t^2
+            # x = 0 + 0 * t + 0.5 * A_MAX * t^2
+            arr[i]['t'] = sqrt(2 * arr[i]['length'] / A_MAX)
+            # v = v0 + a * t
+            # v = 0 + A_MAX * t
+            arr[i]['v'] = A_MAX * arr[i]['t']
+            # a = A_MAX
+            arr[i]['a'] = A_MAX
+
+        # Where and when does the second part end?
+        # The third part's length is the same as the first, so we can calculate the second's length
+        part2_end_x = path_length - part1_end_x
+        # t * v = x
+        # (part2_end_t - part1_end_t) * V_MAX = (part2_end_x - part1_end_x)
+        part2_end_t = part1_end_t + (part2_end_x - part1_end_x) / V_MAX
+
+        # What point will be the last one to enter the second part?
+        second_part = 0
+        for i in xrange(first_part, len(arr)):
+            if arr[i]['length'] >= part2_end_x:
+                second_part = i - 1
+                break
+
+        # Second part
+        for i in range(first_part+1, second_part+1):
+            # x = x0 + v0 * t
+            # x = part1_end_x + V_MAX * (t - part1_end_t)
+            arr[i]['t'] = part1_end_t + (arr[i]['length'] - part1_end_x) / V_MAX
+
+            # v = V_MAX
+            arr[i]['v'] = V_MAX
+
+            # a = 0
+            arr[i]['a'] = 0
+
+        # Third part
+        for i in range(second_part+1, len(arr)):
+            # x = x0 + v0 * t + 0.5 * a * t^2
+            # x = part2_end_x + V_MAX * (t - part2_end_t) + 0.5 * (-A_MAX) * (t - part2_end_t)^2
+            t1 = (-2 * V_MAX - 2 * A_MAX * part2_end_t + 2 *
+                  sqrt(V_MAX ** 2 + 2 * A_MAX * part2_end_x - 2 * A_MAX * arr[i]['length'])) / (-2 * A_MAX)
+            t2 = (-2 * V_MAX - 2 * A_MAX * part2_end_t - 2 *
+                  sqrt(V_MAX ** 2 + 2 * A_MAX * part2_end_x - 2 * A_MAX * arr[i]['length'])) / (-2 * A_MAX)
+
+            # Oh no! Two solutions! Which one is correct?
+            if not t1.is_real or t1 < 0 or t1 > part1_end_t + part2_end_t:  # No complex, negative or bigger numbers
+                                                                            # than the path time here!
+                arr[i]['t'] = t2
+            else:
+                arr[i]['t'] = t1
+
+            # v = v0 + at
+            # v = V_MAX + (-A_MAX) * (t - part2_end_t)
+            arr[i]['v'] = V_MAX - A_MAX * (arr[i]['t'] - part2_end_t)
+
+            # a = -A_MAX
+            arr[i]['a'] = -A_MAX
+
 # Tkinter functions
 
 
@@ -144,7 +309,7 @@ class Window(Frame):
         Frame.__init__(self, master)
         self.master = master
         self.init_window()
-
+        self.lines = None
 
     def init_window(self):
         self.master.title("Simulator manager")
@@ -156,12 +321,12 @@ class Window(Frame):
         if self.lines_count == 0:
             entry = Entry(self, text="", width=20)
             entry.grid(column=1, row=self.lines_count)
-            btnAdd = Button(self, text="Add", command = self.add_command)
-            btnAdd.grid(column=2, row=self.lines_count)
+            btn_add = Button(self, text="Add", command=self.add_command)
+            btn_add.grid(column=2, row=self.lines_count)
             label = Label(self, text=str(self.lines_count))
             label.grid(column=3, row=self.lines_count)
 
-            self.lines.append((entry, btnAdd))
+            self.lines.append((entry, btn_add))
 
             self.lines_count = self.lines_count + 1
 
@@ -171,18 +336,18 @@ class Window(Frame):
             else:
                 entry = Entry(self, text="", width=20)
                 entry.grid(column=1, row=self.lines_count)
-                btnAdd = Button(self, text="Add", command=self.add_command)
-                btnAdd.grid(column=2, row=self.lines_count)
+                btn_add = Button(self, text="Add", command=self.add_command)
+                btn_add.grid(column=2, row=self.lines_count)
                 label = Label(self, text=str(self.lines_count))
                 label.grid(column=3, row=self.lines_count)
 
-                self.lines.append((entry, btnAdd))
+                self.lines.append((entry, btn_add))
 
                 print(self.lines_count-1)
 
                 com_to_execute = self.lines[self.lines_count-1][0].get()
                 print(com_to_execute)
-                ok = execute(com_to_execute)
+                execute(com_to_execute)
 
                 self.lines_count = self.lines_count + 1
 
@@ -241,17 +406,30 @@ def plot_2018_board():
 
 
 def plot():
+    arr = []
     for p in points:
         ax.plot(p.x, p.y, marker='o', label=str(p.name), linewidth=1, markersize=POINT_SIZE)
 
     for p in paths:
-        x, y = curve_to_arrays(p, SAMPLE_SIZE, 1/SAMPLE_SIZE)
+        x, y = curve_to_arrays(p, SAMPLE_SIZE, 1.0/SAMPLE_SIZE)
         ax.plot(x, y, 'r', linewidth=LINE_WIDTH)
+        for i in range(len(x)):
+            arr.append({'x': x[i], 'y': y[i]})
+        arr = find_length(arr)
+        physics(arr)
 
     if IS_2018_BOARD:
         plot_2018_board()
 
     plt.show()
+
+    # Test graphs
+    # v, t = [], []
+    # for i in arr:
+    #     v.append(i['v'])
+    #     t.append(i['t'])
+    # fig1, ax1 = plt.subplots()
+    # ax1.plot(t, v, 'r', linewidth=LINE_WIDTH)
 
     print("plot ended")
     return "ok"
@@ -282,7 +460,7 @@ def execute(input):
 
         points.append(p)
 
-    else: # New path
+    else:  # New path
         requested = parameters.split(',')
         send = []
 
@@ -309,6 +487,13 @@ def main():
     if IS_2018_BOARD:
         plot_2018_board()
     plt.show()
+
+    # Test commands
+    execute("a = (0,0)")
+    execute("b = (200,800)")
+    execute("c = (400,300)")
+    execute("d = (200,200)")
+    execute("p = a,b,c,d")
 
     root.mainloop()
 
